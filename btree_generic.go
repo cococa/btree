@@ -28,7 +28,9 @@
 // It has a flatter structure than an equivalent red-black or other binary tree,
 // which in some cases yields better memory usage and/or performance.
 // See some discussion on the matter here:
-//   http://google-opensource.blogspot.com/2013/01/c-containers-that-save-memory-and-time.html
+//
+//	http://google-opensource.blogspot.com/2013/01/c-containers-that-save-memory-and-time.html
+//
 // Note, though, that this project is in no way related to the C++ B-Tree
 // implementation written about there.
 //
@@ -36,13 +38,14 @@
 // slice of children.  For basic numeric values or raw structs, this can cause
 // efficiency differences when compared to equivalent C++ template code that
 // stores values in arrays within the node:
-//   * Due to the overhead of storing values as interfaces (each
+//   - Due to the overhead of storing values as interfaces (each
 //     value needs to be stored as the value itself, then 2 words for the
 //     interface pointing to that value and its type), resulting in higher
 //     memory use.
-//   * Since interfaces can point to values anywhere in memory, values are
+//   - Since interfaces can point to values anywhere in memory, values are
 //     most likely not stored in contiguous blocks, resulting in a higher
 //     number of cache misses.
+//
 // These issues don't tend to matter, though, when working with strings or other
 // heap-allocated structures, since C++-equivalent structures also must store
 // pointers and also distribute their values across the heap.
@@ -211,10 +214,21 @@ func (s *items[T]) truncate(index int) {
 // find returns the index where the given item should be inserted into this
 // list.  'found' is true if the item already exists in the list at the given
 // index.
+/**
+*   index = 要插入的位置
+*   found = 元素是否本来就存在
+*
+ */
 func (s items[T]) find(item T, less func(T, T) bool) (index int, found bool) {
 	i := sort.Search(len(s), func(i int) bool {
 		return less(item, s[i])
 	})
+	// 这里有点拗，举个例子：
+	// 例1：假如要插入4，原来的位置是【4，5】，假设5的下标为i
+	// 比较 s[i-1] = 4 小于 4 ？ 结果是false，取反则满足条件进入，返回找到了元素，下标为i-1
+	// 例2：假如要插入4，原来的位置是【3，5】，假设5的下标为i
+	// 比较 s[i-1] = 3 小于 4 ？ 结果是true，取反则不满足条件，最终返回没找到，在i 的下标插入4
+	// 这里没看懂为什么要用less 去比较，而不是用== 或者是 compare 这种接口
 	if i > 0 && !less(s[i-1], item) {
 		return i - 1, true
 	}
@@ -224,8 +238,8 @@ func (s items[T]) find(item T, less func(T, T) bool) (index int, found bool) {
 // node is an internal node in a tree.
 //
 // It must at all times maintain the invariant that either
-//   * len(children) == 0, len(items) unconstrained
-//   * len(children) == len(items) + 1
+//   - len(children) == 0, len(items) unconstrained
+//   - len(children) == len(items) + 1
 type node[T any] struct {
 	items    items[T]
 	children items[*node[T]]
@@ -290,13 +304,17 @@ func (n *node[T]) maybeSplitChild(i, maxItems int) bool {
 // insert inserts an item into the subtree rooted at this node, making sure
 // no nodes in the subtree exceed maxItems items.  Should an equivalent item be
 // be found/replaced by insert, it will be returned.
+// 翻译:insert将一个项目插入到该节点的子树中，确保子树中没有节点超过maxItems项。如果insert找到/替换了一个等价的项，它将被返回。
 func (n *node[T]) insert(item T, maxItems int) (_ T, _ bool) {
 	i, found := n.items.find(item, n.cow.less)
 	if found {
+		// 如果找到元素，则直接返回 (元素，true)
 		out := n.items[i]
+		// 这里没看懂，为什么还要在次赋值
 		n.items[i] = item
 		return out, true
 	}
+	//如果children 长度为0，则直接在items 上添加新元素
 	if len(n.children) == 0 {
 		n.items.insertAt(i, item)
 		return
@@ -420,15 +438,20 @@ func (n *node[T]) remove(item T, minItems int, typ toRemove) (_ T, _ bool) {
 // remove it.
 //
 // Most documentation says we have to do two sets of special casing:
-//   1) item is in this node
-//   2) item is in child
+//  1. item is in this node
+//  2. item is in child
+//
 // In both cases, we need to handle the two subcases:
-//   A) node has enough values that it can spare one
-//   B) node doesn't have enough values
+//
+//	A) node has enough values that it can spare one
+//	B) node doesn't have enough values
+//
 // For the latter, we have to check:
-//   a) left sibling has node to spare
-//   b) right sibling has node to spare
-//   c) we must merge
+//
+//	a) left sibling has node to spare
+//	b) right sibling has node to spare
+//	c) we must merge
+//
 // To simplify our code here, we handle cases #1 and #2 the same:
 // If a node doesn't have enough items, we make sure it does (using a,b,c).
 // We then simply redo our remove call, and the second time (regardless of
@@ -691,11 +714,23 @@ func (t *BTreeG[T]) ReplaceOrInsert(item T) (_ T, _ bool) {
 		return
 	} else {
 		t.root = t.root.mutableFor(t.cow)
+		// 如果Node节点的items 长度大于最大值，则进行分裂 假如分裂前[1,2,3,4,5,6]
+		/**
+		*   分裂后
+		*	items          	____[4]_____
+							|          |
+		*   children    [1,2,3]        [5,6]
+		*
+		*
+		*/
 		if len(t.root.items) >= t.maxItems() {
+			// 这里item2 为需要分裂的items 数组中的中间值，以上面的例子来看，就是4， second 为所有大于中间值的集合
 			item2, second := t.root.split(t.maxItems() / 2)
 			oldroot := t.root
+			// 重新创建item, 并插入中间值
 			t.root = t.cow.newNode()
 			t.root.items = append(t.root.items, item2)
+			// 将分裂后的两个数组分别放到children 中
 			t.root.children = append(t.root.children, oldroot, second)
 		}
 	}
@@ -858,13 +893,14 @@ func (t *BTreeG[T]) Len() int {
 // one, instead of being lost to the garbage collector.
 //
 // This call takes:
-//   O(1): when addNodesToFreelist is false, this is a single operation.
-//   O(1): when the freelist is already full, it breaks out immediately
-//   O(freelist size):  when the freelist is empty and the nodes are all owned
-//       by this tree, nodes are added to the freelist until full.
-//   O(tree size):  when all nodes are owned by another tree, all nodes are
-//       iterated over looking for nodes to add to the freelist, and due to
-//       ownership, none are.
+//
+//	O(1): when addNodesToFreelist is false, this is a single operation.
+//	O(1): when the freelist is already full, it breaks out immediately
+//	O(freelist size):  when the freelist is empty and the nodes are all owned
+//	    by this tree, nodes are added to the freelist until full.
+//	O(tree size):  when all nodes are owned by another tree, all nodes are
+//	    iterated over looking for nodes to add to the freelist, and due to
+//	    ownership, none are.
 func (t *BTreeG[T]) Clear(addNodesToFreelist bool) {
 	if t.root != nil && addNodesToFreelist {
 		t.root.reset(t.cow)
@@ -1071,13 +1107,14 @@ func (t *BTree) Len() int {
 // one, instead of being lost to the garbage collector.
 //
 // This call takes:
-//   O(1): when addNodesToFreelist is false, this is a single operation.
-//   O(1): when the freelist is already full, it breaks out immediately
-//   O(freelist size):  when the freelist is empty and the nodes are all owned
-//       by this tree, nodes are added to the freelist until full.
-//   O(tree size):  when all nodes are owned by another tree, all nodes are
-//       iterated over looking for nodes to add to the freelist, and due to
-//       ownership, none are.
+//
+//	O(1): when addNodesToFreelist is false, this is a single operation.
+//	O(1): when the freelist is already full, it breaks out immediately
+//	O(freelist size):  when the freelist is empty and the nodes are all owned
+//	    by this tree, nodes are added to the freelist until full.
+//	O(tree size):  when all nodes are owned by another tree, all nodes are
+//	    iterated over looking for nodes to add to the freelist, and due to
+//	    ownership, none are.
 func (t *BTree) Clear(addNodesToFreelist bool) {
 	(*BTreeG[Item])(t).Clear(addNodesToFreelist)
 }
