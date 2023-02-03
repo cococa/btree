@@ -220,6 +220,8 @@ func (s *items[T]) truncate(index int) {
 *
  */
 func (s items[T]) find(item T, less func(T, T) bool) (index int, found bool) {
+	// 有序数组的二分查找
+	//todo 详细分解
 	i := sort.Search(len(s), func(i int) bool {
 		return less(item, s[i])
 	})
@@ -289,11 +291,15 @@ func (n *node[T]) split(i int) (T, *node[T]) {
 }
 
 // maybeSplitChild checks if a child should be split, and if so splits it.
+// 检查child是否应该被分割，如果是，则分割它。
 // Returns whether or not a split occurred.
+// 返回是否发生了分裂
 func (n *node[T]) maybeSplitChild(i, maxItems int) bool {
+	// 检查items的长度是否小于 maxItems
 	if len(n.children[i].items) < maxItems {
 		return false
 	}
+	// 开始分裂
 	first := n.mutableChild(i)
 	item, second := first.split(maxItems / 2)
 	n.items.insertAt(i, item)
@@ -319,7 +325,9 @@ func (n *node[T]) insert(item T, maxItems int) (_ T, _ bool) {
 		n.items.insertAt(i, item)
 		return
 	}
+	// 插入前先检查是否需要分裂，这里的i 指的是 要在 children items[*node[T]]  哪里的下标位置插入数据
 	if n.maybeSplitChild(i, maxItems) {
+		// items 已经进行了分裂
 		inTree := n.items[i]
 		switch {
 		case n.cow.less(item, inTree):
@@ -708,6 +716,7 @@ func (c *copyOnWriteContext[T]) freeNode(n *node[T]) freeType {
 // nil cannot be added to the tree (will panic).
 func (t *BTreeG[T]) ReplaceOrInsert(item T) (_ T, _ bool) {
 	if t.root == nil {
+		// 最原始的状态，初始化
 		t.root = t.cow.newNode()
 		t.root.items = append(t.root.items, item)
 		t.length++
@@ -718,11 +727,11 @@ func (t *BTreeG[T]) ReplaceOrInsert(item T) (_ T, _ bool) {
 		/**
 		*   分裂后
 		*	items          	____[4]_____
-							|          |
+		*					|          |
 		*   children    [1,2,3]        [5,6]
 		*
 		*
-		*/
+		 */
 		if len(t.root.items) >= t.maxItems() {
 			// 这里item2 为需要分裂的items 数组中的中间值，以上面的例子来看，就是4， second 为所有大于中间值的集合
 			item2, second := t.root.split(t.maxItems() / 2)

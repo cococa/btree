@@ -64,7 +64,8 @@ func TestBTreeG(t *testing.T) {
 		if max, ok := tr.Max(); ok || max != 0 {
 			t.Fatalf("empty max, got %+v", max)
 		}
-		for _, item := range rand.Perm(treeSize) {
+		for ii, item := range rand.Perm(treeSize) {
+			fmt.Print(ii)
 			if x, ok := tr.ReplaceOrInsert(item); ok || x != 0 {
 				t.Fatal("insert found item", item)
 			}
@@ -761,4 +762,14 @@ func BenchmarkDeleteAndRestoreG(b *testing.B) {
 			}
 		}
 	})
+}
+
+func TestBTreeForAdd(t *testing.T) {
+	tr := NewOrderedG[int](*btreeDegree)
+	tr.degree = 8
+	for i := 1; i < 10000; i++ {
+		if x, ok := tr.ReplaceOrInsert(i); ok || x != 0 {
+			t.Fatal("insert found item", i)
+		}
+	}
 }
